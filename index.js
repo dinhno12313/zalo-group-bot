@@ -17,43 +17,27 @@ function getReply(text) {
   const t = (text || "").trim().toLowerCase();
 
   if (t === "#ping") return "pong";
-  if (t === "#help") {
-    return `Menu bot:
-#ping - test bot
-#help - xem menu
-#rule - nội quy nhóm`;
-  }
-  if (t === "#rule") {
-    return "Nội quy: không spam, không toxic, không đăng nội dung vi phạm.";
-  }
-
+  if (t === "#help") return "Menu:\n#ping\n#help\n#rule";
+  if (t === "#rule") return "Nội quy: không spam, không toxic.";
   return null;
 }
 
 async function sendMessage(chatId, text) {
-  try {
-    const url = `https://bot-api.zaloplatforms.com/bot${BOT_TOKEN}/sendMessage`;
+  const url = `https://bot-api.zaloplatforms.com/bot${BOT_TOKEN}/sendMessage`;
 
-    const payload = {
-      chat_id: chatId,
-      text: text
-    };
+  const payload = {
+    chat_id: String(chatId),
+    text: text,
+  };
 
-    const response = await axios.post(url, payload, {
-      headers: {
-        "Content-Type": "application/json"
-      }
-    });
+  const response = await axios.post(url, payload, {
+    headers: {
+      "Content-Type": "application/json",
+    },
+  });
 
-    console.log("sendMessage success:", response.data);
-    return response.data;
-  } catch (error) {
-    console.error(
-      "sendMessage error:",
-      error.response ? error.response.data : error.message
-    );
-    throw error;
-  }
+  console.log("sendMessage response:", JSON.stringify(response.data, null, 2));
+  return response.data;
 }
 
 app.post("/zalo-bot/webhook", async (req, res) => {
@@ -61,34 +45,42 @@ app.post("/zalo-bot/webhook", async (req, res) => {
     const secret = req.header("X-Bot-Api-Secret-Token");
 
     if (secret !== BOT_WEBHOOK_SECRET) {
-      console.log("Invalid webhook secret");
-      return res.status(401).json({ ok: false, message: "invalid secret" });
+      console.log("Invalid webhook secret:", secret);
+      return res.status(403).json({ ok: false, message: "Unauthorized" });
     }
 
-    console.log("Bot webhook body:", JSON.stringify(req.body, null, 2));
+    console.log("=== FULL WEBHOOK BODY ===");
+    console.log(JSON.stringify(req.body, null, 2));
 
-    // Tạm map theo cấu trúc phổ biến
+    const data = req.body?.result || {};
+
+    // thử các vị trí phổ biến
     const text =
-      req.body?.message?.text ||
-      req.body?.text ||
+      data?.message?.text ||
+      data?.text ||
       "";
 
     const chatId =
-      req.body?.message?.chat?.id ||
-      req.body?.chat?.id ||
+      data?.message?.chat?.id ||
+      data?.chat?.id ||
       null;
+
+    console.log("parsed text =", text);
+    console.log("parsed chatId =", chatId);
 
     const reply = getReply(text);
 
     if (reply && chatId) {
       await sendMessage(chatId, reply);
+    } else {
+      console.log("No reply sent. reply =", reply, "chatId =", chatId);
     }
 
     return res.status(200).json({ ok: true });
   } catch (err) {
     console.error(
       "Webhook error:",
-      err.response ? err.response.data : err.message
+      err.response?.data || err.message || err
     );
     return res.status(200).json({ ok: false });
   }
