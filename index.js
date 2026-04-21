@@ -44,44 +44,20 @@ app.post("/zalo-bot/webhook", async (req, res) => {
   try {
     const secret = req.header("X-Bot-Api-Secret-Token");
 
-    if (secret !== BOT_WEBHOOK_SECRET) {
-      console.log("Invalid webhook secret:", secret);
+    console.log("received secret =", secret);
+    console.log("expected secret =", process.env.BOT_WEBHOOK_SECRET);
+
+    if (secret !== process.env.BOT_WEBHOOK_SECRET) {
+      console.log("Invalid webhook secret");
       return res.status(403).json({ ok: false, message: "Unauthorized" });
     }
 
     console.log("=== FULL WEBHOOK BODY ===");
     console.log(JSON.stringify(req.body, null, 2));
 
-    const data = req.body?.result || {};
-
-    // thử các vị trí phổ biến
-    const text =
-      data?.message?.text ||
-      data?.text ||
-      "";
-
-    const chatId =
-      data?.message?.chat?.id ||
-      data?.chat?.id ||
-      null;
-
-    console.log("parsed text =", text);
-    console.log("parsed chatId =", chatId);
-
-    const reply = getReply(text);
-
-    if (reply && chatId) {
-      await sendMessage(chatId, reply);
-    } else {
-      console.log("No reply sent. reply =", reply, "chatId =", chatId);
-    }
-
     return res.status(200).json({ ok: true });
   } catch (err) {
-    console.error(
-      "Webhook error:",
-      err.response?.data || err.message || err
-    );
+    console.error("Webhook error:", err);
     return res.status(200).json({ ok: false });
   }
 });
