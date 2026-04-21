@@ -1,43 +1,26 @@
 require("dotenv").config();
 const express = require("express");
-const axios = require("axios");
 
 const app = express();
 app.use(express.json());
 
 const PORT = process.env.PORT || 3000;
-const ACCESS_TOKEN = process.env.ZALO_OA_ACCESS_TOKEN;
+const BOT_WEBHOOK_SECRET = process.env.BOT_WEBHOOK_SECRET;
 
-app.listen(PORT, () => {
-
-  console.log(`Server running on port ${PORT}`);
-
-});
-
-// test route
 app.get("/", (req, res) => {
-  res.setHeader("Content-Type", "text/html; charset=utf-8");
-  res.send(`
-    <!doctype html>
-    <html lang="vi">
-      <head>
-        <meta charset="utf-8" />
-        <meta name="zalo-platform-site-verification" content="JiAnSfBhF4zJdOfgqAiAGYc9f4F5_t4UDZ4v" />
-        <title>Zalo bot server</title>
-      </head>
-      <body>
-        <h1>Zalo bot server is running</h1>
-      </body>
-    </html>
-  `);
+  res.send("Zalo Bot server is running");
 });
 
-// webhook route
-app.post("/zalo/webhook", async (req, res) => {
+app.post("/zalo-bot/webhook", (req, res) => {
   try {
-    console.log("Webhook body:", JSON.stringify(req.body, null, 2));
+    const secret = req.header("X-Bot-Api-Secret-Token");
 
-    // tạm thời chỉ log, chưa reply
+    if (secret !== BOT_WEBHOOK_SECRET) {
+      console.log("Invalid webhook secret");
+      return res.status(401).json({ ok: false });
+    }
+
+    console.log("Bot webhook body:", JSON.stringify(req.body, null, 2));
     return res.status(200).json({ ok: true });
   } catch (err) {
     console.error("Webhook error:", err);
@@ -46,5 +29,5 @@ app.post("/zalo/webhook", async (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`Server running at http://localhost:${PORT}`);
+  console.log(`Server running on port ${PORT}`);
 });
