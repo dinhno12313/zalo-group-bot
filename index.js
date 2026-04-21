@@ -12,50 +12,37 @@ const BOT_TOKEN = process.env.BOT_TOKEN;
 const BOT_WEBHOOK_SECRET = process.env.BOT_WEBHOOK_SECRET;
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 
-// ===== Basic validation =====
-if (!BOT_TOKEN) {
-  throw new Error("Missing BOT_TOKEN in environment variables.");
-}
-if (!BOT_WEBHOOK_SECRET) {
-  throw new Error("Missing BOT_WEBHOOK_SECRET in environment variables.");
-}
-if (!GEMINI_API_KEY) {
-  throw new Error("Missing GEMINI_API_KEY in environment variables.");
-}
+if (!BOT_TOKEN) throw new Error("Missing BOT_TOKEN");
+if (!BOT_WEBHOOK_SECRET) throw new Error("Missing BOT_WEBHOOK_SECRET");
+if (!GEMINI_API_KEY) throw new Error("Missing GEMINI_API_KEY");
 
-// Google GenAI SDK for Gemini API
 const ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
 
-// ===== Simple in-memory chat history =====
-// Lưu tạm trong RAM, mất khi redeploy/restart.
 const chatMemory = new Map();
 const MAX_HISTORY_PER_CHAT = 10;
 const MAX_INPUT_LENGTH = 2000;
 const MAX_OUTPUT_LENGTH = 1200;
-
-// ===== Config =====
 const GEMINI_MODEL = "gemini-2.5-flash";
-const SYSTEM_PROMPT = `
-Bạn là trợ lý AI trên Zalo.
-Trả lời bằng tiếng Việt, rõ ràng, tự nhiên, hữu ích.
-Ưu tiên ngắn gọn nhưng đủ ý.
-Nếu câu hỏi mơ hồ, hãy hỏi lại ngắn gọn.
-Không bịa thông tin. Nếu không chắc, nói rõ là không chắc.
-Không dùng markdown phức tạp.
-`.trim();
 
-// ===== Helpers =====
-function truncateText(text, maxLen) {
-  if (!text) return "";
-  return text.length > maxLen ? `${text.slice(0, maxLen)}...` : text;
-}
+const SYSTEM_PROMPT = `
+Bạn là Suma, một trợ lý AI trên Zalo.
+Trả lời bằng tiếng Việt, rõ ràng, hữu ích, tự nhiên.
+Ưu tiên ngắn gọn nhưng đủ ý.
+Nếu không chắc, hãy nói rõ là không chắc.
+`.trim();
 
 function normalizeText(text) {
   return String(text || "").trim();
 }
 
+function truncateText(text, maxLen) {
+  if (!text) return "";
+  return text.length > maxLen ? `${text.slice(0, maxLen)}...` : text;
+}
+
 function isCommand(text) {
-  return normalizeText(text).startsWith("#");
+  const t = normalizeText(text).toLowerCase();
+  return ["#ping", "#help", "#reset"].includes(t);
 }
 
 function getHelpText() {
@@ -65,7 +52,8 @@ function getHelpText() {
     "#help - xem hướng dẫn",
     "#reset - xóa ngữ cảnh cuộc trò chuyện",
     "",
-    "Bạn cũng có thể nhắn tin bình thường để hỏi AI.",
+    "Trong nhóm: hãy @Suma rồi hỏi.",
+    'Ví dụ: "@Suma giải thích Docker là gì"',
   ].join("\n");
 }
 
@@ -93,7 +81,6 @@ function buildContentsFromHistory(history, userText) {
   const contents = [];
 
   for (const item of history) {
-    if (!item.text) continue;
     contents.push({
       role: item.role === "assistant" ? "model" : "user",
       parts: [{ text: item.text }],
@@ -106,6 +93,80 @@ function buildContentsFromHistory(history, userText) {
   });
 
   return contents;
+}
+
+function isPrivateChat(message) {
+  const chatType =
+    message?.chat?.type ||
+    message?.chat_type ||
+    "";
+
+  return String(chatType).toLowerCase() !== "group";
+}
+
+function getBotName(body) {
+  return (
+    body?.bot?.display_name ||
+    body?.bot?.name ||
+    "Suma"
+  );
+}
+
+function getBotId(body) {
+  return (
+    body?.bot?.id ||
+    body?.bot_id ||
+    null
+  );
+}
+
+function getMentions(message) {
+  return (
+    message?.mentions ||
+    message?.mention_users ||
+    []
+  );
+}
+
+function isMentioningBot(body) {
+  const message = body?.message || {};
+  const mentions = getMentions(message);
+  const botId = getBotId(body);
+  const botName = getBotName(body).toLowerCase();
+  const text = String(message?.text || "").toLowerCase();
+
+  if (Array.isArray(mentions) && mentions.length > 0) {
+    if (!botId) return true;
+
+    const matched = mentions.some((item) => {
+      const id = item?.id || item?.user_id || item?.uid;
+      return String(id) === String(botId);
+    });
+
+    if (matched) return true;
+  }
+
+  if (botName && text.includes(`@${botName.toLowerCase()}`)) {
+    return true;
+  }
+
+  return false;
+}
+
+function stripBotMention(body, text) {
+  const botName = getBotName(body);
+  let cleaned = String(text || "");
+
+  const patterns = [
+    new RegExp(`@${botName}`, "ig"),
+    /@Suma/ig,
+  ];
+
+  for (const pattern of patterns) {
+    cleaned = cleaned.replace(pattern, " ");
+  }
+
+  return normalizeText(cleaned);
 }
 
 async function sendZaloMessage(chatId, text) {
@@ -149,14 +210,8 @@ async function askGemini(chatId, userText) {
 async function handleCommand(chatId, text) {
   const cmd = normalizeText(text).toLowerCase();
 
-  if (cmd === "#ping") {
-    return "pong";
-  }
-
-  if (cmd === "#help") {
-    return getHelpText();
-  }
-
+  if (cmd === "#ping") return "pong";
+  if (cmd === "#help") return getHelpText();
   if (cmd === "#reset") {
     clearHistory(chatId);
     return "Đã xóa ngữ cảnh cuộc trò chuyện.";
@@ -165,7 +220,6 @@ async function handleCommand(chatId, text) {
   return "Lệnh không hợp lệ. Gõ #help để xem danh sách lệnh.";
 }
 
-// ===== Routes =====
 app.get("/", (req, res) => {
   res.send("Zalo AI Bot is running");
 });
@@ -181,35 +235,57 @@ app.post("/zalo-bot/webhook", async (req, res) => {
     const message = req.body?.message || {};
 
     const chatId = message?.chat?.id || null;
-    const text = normalizeText(message?.text || "");
+    const rawText = normalizeText(message?.text || "");
     const isBot = Boolean(message?.from?.is_bot);
 
-    // Trả 200 sớm cho event không cần xử lý
     if (eventName !== "message.text.received") {
       return res.status(200).json({ ok: true, skipped: "unsupported_event" });
     }
 
-    if (!chatId || !text) {
+    if (!chatId || !rawText) {
       return res.status(200).json({ ok: true, skipped: "missing_chat_or_text" });
     }
 
-    // Chặn loop bot tự trả lời chính nó
     if (isBot) {
       return res.status(200).json({ ok: true, skipped: "bot_message" });
     }
 
-    const safeUserText = truncateText(text, MAX_INPUT_LENGTH);
-    let replyText = "";
-
-    if (isCommand(safeUserText)) {
-      replyText = await handleCommand(chatId, safeUserText);
-    } else {
-      replyText = await askGemini(chatId, safeUserText);
-
-      // Chỉ lưu lịch sử cho tin nhắn AI chat thường
-      pushHistory(chatId, "user", safeUserText);
-      pushHistory(chatId, "assistant", replyText);
+    if (isCommand(rawText)) {
+      const replyText = await handleCommand(chatId, rawText);
+      await sendZaloMessage(chatId, replyText);
+      return res.status(200).json({ ok: true, mode: "command" });
     }
+
+    const privateChat = isPrivateChat(message);
+
+    if (!privateChat) {
+      const mentioned = isMentioningBot(req.body);
+
+      if (!mentioned) {
+        return res.status(200).json({ ok: true, skipped: "not_mentioned_in_group" });
+      }
+    }
+
+    let userPrompt = rawText;
+
+    if (!privateChat) {
+      userPrompt = stripBotMention(req.body, rawText);
+    }
+
+    userPrompt = truncateText(userPrompt, MAX_INPUT_LENGTH);
+
+    if (!userPrompt) {
+      await sendZaloMessage(
+        chatId,
+        'Bạn hãy hỏi đầy đủ hơn, ví dụ: "@Suma giải thích Docker là gì"'
+      );
+      return res.status(200).json({ ok: true, mode: "empty_after_mention_strip" });
+    }
+
+    const replyText = await askGemini(chatId, userPrompt);
+
+    pushHistory(chatId, "user", userPrompt);
+    pushHistory(chatId, "assistant", replyText);
 
     await sendZaloMessage(chatId, replyText);
 
@@ -217,7 +293,9 @@ app.post("/zalo-bot/webhook", async (req, res) => {
       JSON.stringify({
         event: eventName,
         chatId,
-        textPreview: truncateText(safeUserText, 80),
+        privateChat,
+        rawText: truncateText(rawText, 100),
+        userPrompt: truncateText(userPrompt, 100),
         replied: true,
       })
     );
@@ -229,7 +307,6 @@ app.post("/zalo-bot/webhook", async (req, res) => {
       error?.response?.data || error?.message || error
     );
 
-    // Cố gắng gửi fallback nếu còn lấy được chatId
     try {
       const chatId = req.body?.message?.chat?.id;
       if (chatId) {
