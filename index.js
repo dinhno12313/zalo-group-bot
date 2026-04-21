@@ -34,7 +34,7 @@ const MAX_INPUT_LENGTH = 2000;
 const MAX_OUTPUT_LENGTH = 1200;
 
 // ===== Config =====
-const GEMINI_MODEL = "gemini-3-flash";
+const GEMINI_MODEL = "gemini-2.5-flash";
 const SYSTEM_PROMPT = `
 Bạn là trợ lý AI trên Zalo.
 Trả lời bằng tiếng Việt, rõ ràng, tự nhiên, hữu ích.
