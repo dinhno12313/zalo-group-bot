@@ -22,7 +22,7 @@ app.get("/", (req, res) => {
     <html lang="vi">
       <head>
         <meta charset="utf-8" />
-        <meta name="zalo-platform-site-verification" content="PASTE_GIA_TRI_ZALO_CAP_O_DAY" />
+        <meta name="zalo-platform-site-verification" content="JiAnSfBhF4zJdOfgqAiAGYc9f4F5_t4UDZ4v" />
         <title>Zalo bot server</title>
       </head>
       <body>
