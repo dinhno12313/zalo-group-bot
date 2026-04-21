@@ -16,7 +16,20 @@ app.listen(PORT, () => {
 
 // test route
 app.get("/", (req, res) => {
-  res.send("Zalo bot server is running");
+  res.setHeader("Content-Type", "text/html; charset=utf-8");
+  res.send(`
+    <!doctype html>
+    <html lang="vi">
+      <head>
+        <meta charset="utf-8" />
+        <meta name="zalo-platform-site-verification" content="PASTE_GIA_TRI_ZALO_CAP_O_DAY" />
+        <title>Zalo bot server</title>
+      </head>
+      <body>
+        <h1>Zalo bot server is running</h1>
+      </body>
+    </html>
+  `);
 });
 
 // webhook route
